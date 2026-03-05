@@ -61,3 +61,8 @@ app.post('/apply', async (req, res) => {
   await newHoliday.save();
   res.status(200).json({ message: "Holiday applied successfully!" });
 });
+
+app.get('/api/status', async (req, res) => {
+  const count = await Holiday.countDocuments();
+  res.json({ count });
+});
