@@ -1,14 +1,11 @@
-version: '3.8'
 services:
   app:
     build: .
     ports:
-      - "5000:5000" # Maps your computer's port 5000 to Docker's 5000
+      - "5000:5000"  # Backend
+      - "3000:3000"  # Frontend Default
+      - "3001:3001"  # Frontend Backup (since your terminal said 3001)
     volumes:
-      - .:/usr/src/app # "Live-sync" your code so you don't have to rebuild
+      - .:/usr/src/app
     environment:
-      - MONGO_URI=mongodb://db:27017/holidayDB
-  db:
-    image: mongo:latest
-    ports:
-      - "27017:27017"
+      - CHOKIDAR_USEPOLLING=true # This helps React "see" changes on Windows
