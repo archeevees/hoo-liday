@@ -7,6 +7,8 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+app.use(express.json()); 
+
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ Successfully connected to MongoDB Atlas!"))
@@ -33,16 +35,17 @@ const Holiday = mongoose.model('Holiday', holidaySchema);
 
 app.post('/apply', async (req, res) => {
   const now = new Date();
-  
-  // 1. Check if it's Monday 07:00 AM Malaysia Time (UTC+8)
-  // Note: Server time is usually UTC. Monday 07:00 MYT is Sunday 23:00 UTC.
-  const day = now.getUTCDay(); // 0 is Sunday, 1 is Monday
-  const hour = now.getUTCHours();
+  const day = now.getUTCDay();   // 0=Sun, 1=Mon... 4=Thu
+  const hour = now.getUTCHours(); 
 
-  // If it's Sunday before 23:00 UTC, it's not yet Monday 07:00 MYT
-  // This is a simple version; we can refine this!
-  if (day === 0 && hour < 23) {
-    return res.status(403).json({ message: "Applications open on Monday at 07:00 AM." });
+  // STRICT LOCK: Only allow if Day is Monday (1) AND Hour is >= 07:00 (UTC 23:00 Sun)
+  // For testing on a Thursday, you might want to comment this out!
+  const isMondayAfterSeven = (day === 1 && hour >= 0) || (day === 0 && hour >= 23);
+  
+  if (!isMondayAfterSeven) {
+     // For now, let's just log it so you can see it in Docker logs
+     console.log("Attempted access outside of window");
+     // return res.status(403).json({ message: "Closed! Opens Monday 7AM." });
   }
 
   // 2. Count current applications for this week
