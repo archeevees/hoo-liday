@@ -30,7 +30,7 @@ function App() {
       {slotsTaken < 5 ? (
         <div>
           <input 
-            placeholder="Enter your name" 
+            placeholder="Enter your  full name" 
             onChange={(e) => setName(e.target.value)} 
           />
           <button onClick={handleApply}>Apply Now</button>
