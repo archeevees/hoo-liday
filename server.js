@@ -7,10 +7,10 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// 1. MIDDLEWARE: Allows the server to read the "Name" and "ID" sent from React
+// 1. MIDDLEWARE
 app.use(express.json()); 
 
-// 2. DATABASE CONNECTION: Added a 5-second timeout to prevent silent hanging
+// 2. DATABASE CONNECTION
 console.log("Checking MONGO_URI:", process.env.MONGO_URI ? "Label found in .env" : "MISSING LABEL IN .env!");
 
 mongoose.connect(process.env.MONGO_URI, {
@@ -22,12 +22,13 @@ mongoose.connect(process.env.MONGO_URI, {
     console.error("❌ MESSAGE:", err.message);
   });
 
-// 3. DATABASE SCHEMA: Defining what a "Holiday" looks like
+// 3. DATABASE SCHEMA
 const holidaySchema = new mongoose.Schema({
   staffName: String,
   staffId: String,
-  applyDate: { type: Date, default: Date.now },
-  // Automatically delete the record after 30 days
+  holidayDate: String, // The date they picked from the calendar
+  reason: String,      // Their reasoning
+  applyDate: { type: Date, default: Date.now }, 
   createdAt: { type: Date, expires: '30d', default: Date.now }
 });
 
@@ -38,41 +39,58 @@ const Holiday = mongoose.model('Holiday', holidaySchema);
 // Root check
 app.get('/', (req, res) => res.send("API is running and connected to DB."));
 
-// Get Status: Tells React how many slots are taken
+// Get Status: Tells React how many slots are taken THIS WEEK
 app.get('/api/status', async (req, res) => {
   try {
-    const count = await Holiday.countDocuments();
-    res.json({ count });
+    const now = new Date();
+    // Calculate last Monday 7AM MYT (Sunday 23:00 UTC)
+    const lastMonday = new Date();
+    lastMonday.setUTCHours(23, 0, 0, 0);
+    lastMonday.setUTCDate(now.getUTCDate() - ((now.getUTCDay() + 6) % 7));
+    if (now < lastMonday) lastMonday.setUTCDate(lastMonday.getUTCDate() - 7);
+
+    const weeklyCount = await Holiday.countDocuments({
+      applyDate: { $gte: lastMonday }
+    });
+
+    res.json({ count: weeklyCount });
   } catch (err) {
     res.status(500).json({ error: "Database not reachable" });
   }
 });
 
-// Apply Logic: The Gatekeeper
+// Apply Logic: The Smart Gatekeeper
 app.post('/api/apply', async (req, res) => {
   try {
     const now = new Date();
-    const day = now.getUTCDay();   // 0=Sun, 1=Mon
-    const hour = now.getUTCHours(); 
-
-    // TIME LOCK: Opens Monday 07:00 AM Malaysia (Sunday 23:00 UTC)
-    const isMondayAfterSeven = (day === 1) || (day === 0 && hour >= 23);
     
-    // TEMPORARY: Comment out the next 3 lines if you want to test on a Thursday!
-    if (!isMondayAfterSeven) {
-       return res.status(403).json({ message: "Closed! Applications open Monday at 7:00 AM." });
+    // Step A: Calculate the Reset Point (Last Monday 7:00 AM Malaysia Time)
+    const lastMonday = new Date();
+    lastMonday.setUTCHours(23, 0, 0, 0); // 23:00 UTC Sunday = 07:00 MYT Monday
+    lastMonday.setUTCDate(now.getUTCDate() - ((now.getUTCDay() + 6) % 7));
+    
+    // If it's currently Sunday before 11PM UTC, the 'lastMonday' was actually 6 days ago
+    if (now < lastMonday) {
+        lastMonday.setUTCDate(lastMonday.getUTCDate() - 7);
     }
 
-    // SLOT LIMIT: Only allow first 5
-    const count = await Holiday.countDocuments();
-    if (count >= 5) {
-      return res.status(403).json({ message: "Slots full! All 5 holidays have been taken." });
+    // Step B: Count only the applications from THIS week
+    const weeklyCount = await Holiday.countDocuments({
+      applyDate: { $gte: lastMonday }
+    });
+
+    // Step C: Check if slots for this week are full
+    if (weeklyCount >= 5) {
+      return res.status(403).json({ 
+        message: "Slots full for this week! Please try again next Monday at 7:00 AM." 
+      });
     }
 
-    // SAVE TO DB
+    // Step D: Save the application (Kept for 30 days automatically)
     const newHoliday = new Holiday({
       staffName: req.body.name,
-      staffId: req.body.id
+      staffId: req.body.id,
+      applyDate: now 
     });
 
     await newHoliday.save();
